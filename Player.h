@@ -1,37 +1,30 @@
-#ifndef PLAYER_H
-#define PLAYER_H
-
+#pragma once
 #include <iostream>
 #include <thread>
 #include <mutex>
 #include <condition_variable>
 #include <vector>
-#include <chrono>
 #include <random>
 using namespace std;
 
-// Shared globals
-extern int n;               // max concurrent instances
-extern int t1, t2;          // dungeon time range
-extern int waitingTanks;
-extern int waitingHealers;
-extern int waitingDPS;
-extern int activeInstances;
-
-extern mutex mtx;
-extern condition_variable cv;
-
+// Struct for each dungeon instance
 struct Instance {
     bool active = false;
     int partiesServed = 0;
     int totalTime = 0;
 };
 
+// Global shared data
+extern int n, t1, t2;
+extern int waitingTanks, waitingHealers, waitingDPS, activeInstances;
+extern bool allPlayersQueued;
+extern mutex mtx;
+extern condition_variable cv;
 extern vector<Instance> instances;
 
-// Player thread functions
+// Thread functions
 void tankThread();
 void healerThread();
 void dpsThread();
-
-#endif
+void runDungeon(int id, int duration);
+void partyManager();
