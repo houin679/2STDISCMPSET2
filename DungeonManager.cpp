@@ -1,47 +1,31 @@
 #include "Player.h"
-#include <iostream>
-#include <thread>
-#include <mutex>
-#include <condition_variable>
-#include <random>
 #include <chrono>
-using namespace std;
 
-// === Shared Globals (declared extern in Player.h) ===
-extern int n, t1, t2;
-extern int waitingTanks, waitingHealers, waitingDPS;
-extern int activeInstances;
-extern bool allPlayersQueued;
-
-extern mutex mtx;
-extern condition_variable cv;
-
-extern vector<Instance> instances;
-
-// === Function Prototypes ===
-void runDungeon(int id, int duration);
-void printInstanceStatus();
-
-// === Function Definitions ===
-
-// Print the status of all dungeon instances
+// Print the status of all dungeon instances (MUST be called with lock held)
 void printInstanceStatus() {
-    // NO lock_guard here!
     cout << "\n=== Current Instance Status ===\n";
     for (int i = 0; i < n; ++i) {
-        cout << "Instance " << i + 1 << ": "
-            << (instances[i].active ? "active" : "empty") << "\n";
+        cout << "Instance " << (i + 1) << ": ";
+        if (instances[i].active) {
+            cout << "active\n";
+        }
+        else {
+            cout << "empty\n";
+        }
     }
     cout << "===============================\n";
 }
 
 // Simulate running a dungeon instance
-void runDungeon(int id, int duration) {
+void runDungeon(int id, int duration, int tank, int healer, int dps1, int dps2, int dps3) {
     {
         lock_guard<mutex> lock(mtx);
-        cout << "[Instance " << id + 1 << "] Running for " << duration << "s" << endl;
+        cout << "\n[Instance " << (id + 1) << "] Party entering dungeon (Duration: " << duration << "s)\n";
+        cout << "  Party composition - Tank #" << tank << ", Healer #" << healer
+            << ", DPS #" << dps1 << ", #" << dps2 << ", #" << dps3 << "\n";
     }
 
+    // Simulate dungeon run
     this_thread::sleep_for(chrono::seconds(duration));
 
     {
@@ -50,11 +34,12 @@ void runDungeon(int id, int duration) {
         instances[id].partiesServed++;
         instances[id].totalTime += duration;
         activeInstances--;
-        cout << "[Instance " << id + 1 << "] Finished." << endl;
-        printInstanceStatus(); // Show updated status after dungeon finishes
+
+        cout << "\n[Instance " << (id + 1) << "] Party completed dungeon.\n";
+        printInstanceStatus();
     }
 
-    cv.notify_all(); // wake the manager to form more parties
+    cv.notify_all();  // Wake party manager to form more parties
 }
 
 // Party manager: forms parties and assigns them to instances
@@ -66,51 +51,71 @@ void partyManager() {
     while (true) {
         unique_lock<mutex> lock(mtx);
 
-        // Wait until there are enough players OR all players are queued
+        // Wait until there are enough players to form a party AND an available instance
+        // OR all players have queued (time to check if we should exit)
         cv.wait(lock, [] {
             return ((waitingTanks >= 1 && waitingHealers >= 1 && waitingDPS >= 3 && activeInstances < n)
                 || allPlayersQueued);
             });
 
-        // Exit condition — nothing left to do
+        // Exit condition: no more players coming AND can't form more parties AND all instances finished
         if (allPlayersQueued &&
             !(waitingTanks >= 1 && waitingHealers >= 1 && waitingDPS >= 3) &&
             activeInstances == 0) {
+            cout << "\n[Party Manager] No more parties can be formed. Shutting down.\n";
             break;
         }
 
         // Form as many parties as possible while resources allow
         while (waitingTanks >= 1 && waitingHealers >= 1 && waitingDPS >= 3 && activeInstances < n) {
+            // Pop players from FIFO queues (ensures fairness, prevents starvation)
+            int tank = tankQueue.front(); tankQueue.pop();
+            int healer = healerQueue.front(); healerQueue.pop();
+            int dps1 = dpsQueue.front(); dpsQueue.pop();
+            int dps2 = dpsQueue.front(); dpsQueue.pop();
+            int dps3 = dpsQueue.front(); dpsQueue.pop();
+
+            // Update waiting counters
             waitingTanks--;
             waitingHealers--;
             waitingDPS -= 3;
 
             // Find an available instance
-            int id = -1;
+            int instanceId = -1;
             for (int i = 0; i < n; ++i) {
                 if (!instances[i].active) {
-                    id = i;
+                    instanceId = i;
                     break;
                 }
             }
 
-            if (id == -1) {
-                // no free instance — shouldn’t happen due to condition, but safety first
+            if (instanceId == -1) {
+                // Safety check: shouldn't happen due to wait condition
+                cout << "[Error] No free instance found despite condition check!\n";
                 break;
             }
 
-            // Mark instance active before releasing lock
-            instances[id].active = true;
+            // Mark instance as active
+            instances[instanceId].active = true;
             activeInstances++;
 
+            // Generate random dungeon duration
             int duration = dist(gen);
 
-            cout << "[Party Formed] Assigned to Instance " << id + 1
-                << " (Duration: " << duration << "s)" << endl;
-            printInstanceStatus(); // Show current instance occupancy
+            cout << "\n[Party Formed] Tank #" << tank << ", Healer #" << healer
+                << ", DPS #" << dps1 << ", #" << dps2 << ", #" << dps3 << "\n";
+            cout << "Assigned to Instance " << (instanceId + 1) << "\n";
 
-            // Launch dungeon thread
-            thread(runDungeon, id, duration).detach();
+            printInstanceStatus();
+
+            // Launch dungeon in a separate thread
+            thread(runDungeon, instanceId, duration, tank, healer, dps1, dps2, dps3).detach();
+        }
+
+        // Show current waiting players if any
+        if (waitingTanks > 0 || waitingHealers > 0 || waitingDPS > 0) {
+            cout << "\nPlayers waiting: " << waitingTanks << " Tanks, "
+                << waitingHealers << " Healers, " << waitingDPS << " DPS\n";
         }
     }
 }

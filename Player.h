@@ -4,6 +4,7 @@
 #include <mutex>
 #include <condition_variable>
 #include <vector>
+#include <queue>
 #include <random>
 using namespace std;
 
@@ -22,9 +23,15 @@ extern mutex mtx;
 extern condition_variable cv;
 extern vector<Instance> instances;
 
+// FIFO queues for fairness (prevent starvation)
+extern queue<int> tankQueue;
+extern queue<int> healerQueue;
+extern queue<int> dpsQueue;
+
 // Thread functions
-void tankThread();
-void healerThread();
-void dpsThread();
-void runDungeon(int id, int duration);
+void tankThread(int id);
+void healerThread(int id);
+void dpsThread(int id);
+void runDungeon(int id, int duration, int tank, int healer, int dps1, int dps2, int dps3);
 void partyManager();
+void printInstanceStatus();
