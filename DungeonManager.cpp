@@ -30,6 +30,8 @@ void runDungeon(int id, int duration, int tank, int healer, int dps1, int dps2, 
 
     {
         lock_guard<mutex> lock(mtx);
+        cout << "[Debug] Instance " << (id + 1) << " finished its run. Freeing slot...\n";
+
         instances[id].active = false;
         instances[id].partiesServed++;
         instances[id].totalTime += duration;
