@@ -1,4 +1,4 @@
-#  Dungeon Queue Synchronization (PSet2)
+#  Dungeon Queue Synchronization (PSET2)
 
 This program simulates the **LFG (Looking for Group)** dungeon queuing system of an MMORPG — designed to demonstrate **process synchronization** using C++ threads, mutexes, and condition variables.
 
